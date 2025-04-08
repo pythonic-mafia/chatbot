@@ -1,56 +1,94 @@
 import streamlit as st
+import requests
 from openai import OpenAI
 
-# Show title and description.
-st.title("💬 Chatbot")
+# 1) Session state for storing keys and chat messages
+if "calendar_id" not in st.session_state:
+    st.session_state["calendar_id"] = ""
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = ""
+if "start_chat" not in st.session_state:
+    st.session_state["start_chat"] = False
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
+
+# 2) Title and instructions
+st.title("💬 AI Agent")
+
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    "This simple chatbot uses OpenAI's GPT-4o-mini model to generate responses. "
+    "Please enter your GHL user ID and Calendar ID, then click the 'Start Chatting' button."
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# 3) Let the user enter tokens
+st.session_state["user_id"] = st.text_input(
+    "GHL User ID", 
+    type="password", 
+    value=st.session_state["user_id"]
+)
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# 4) Let the user enter tokens
+st.session_state["calendar_id"] = st.text_input(
+    "GHL Calendar ID", 
+    type="password", 
+    value=st.session_state["calendar_id"]
+)
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# 5) Button to start chatting
+if st.button("Start Chatting"):
+    user_id = st.session_state["user_id"]
+    calendar_id = st.session_state["calendar_id"]
+    if not user_id or not calendar_id:
+        st.warning("Please provide both your GHL User ID and GHL Calendar ID.")
+    else:
+        st.session_state["start_chat"] = True
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
+        # Restart the chat session using the specified endpoint
+        headers = {
+            "Content-Type": "application/json",
+        }
+        restart_resp = requests.post(
+            f"https://agent.searchatlas.com/api/restart/?userId={user_id}",
+            headers=headers,
+        )
+        if restart_resp.status_code == 200:
+            st.success("Chat session restarted successfully.")
+        else:
+            st.error(f"Failed to restart chat session: {restart_resp.text}")
+
+# Display previous messages from session state
+for message in st.session_state["messages"]:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# 5) Chat interface
+if st.session_state["start_chat"]:
+    calendar_id = st.session_state["calendar_id"]
+    user_id = st.session_state["user_id"]
+
+    # Chat input
+    if prompt := st.chat_input("Ask me anything..."):
+        message = {"role": "user", "content": prompt}
+        st.session_state["messages"].append(message)
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
-
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+        # Call Django endpoint with JWT
+        headers = {
+            "Content-Type": "application/json",
+        }
+        resp = requests.post(
+            f"https://c1d8-111-88-84-231.ngrok-free.app/api/calendars/{st.session_state['calendar_id']}/free-slots?userId={st.session_state['user_id']}&days=7&timeout=60",
+            json={"message": prompt},
+            headers=headers,
         )
-
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        if resp.status_code == 200:
+            django_data = resp.json()
+            bot_message = django_data.get("response", "No response")
+            print(django_data)
+            message = {"role": "assistant", "content": bot_message}
+            st.session_state["messages"].append({"role": "assistant", "content": bot_message})
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+        else:
+            bot_message = f"Error calling Django API: {resp.text}"
