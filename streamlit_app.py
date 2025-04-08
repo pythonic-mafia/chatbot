@@ -48,7 +48,7 @@ if st.button("Start Chatting"):
             "Content-Type": "application/json",
         }
         restart_resp = requests.post(
-            f"https://agent.searchatlas.com/api/restart/?userId={user_id}",
+            f"https://c1d8-111-88-84-231.ngrok-free.app/api/restart/?userId={user_id}",
             headers=headers,
         )
         if restart_resp.status_code == 200:
