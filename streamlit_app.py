@@ -13,7 +13,7 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
 # 2) Title and instructions
-st.title("💬 AI Agent")
+st.title("💬 GHL AI Agent")
 
 st.write(
     "This simple chatbot uses OpenAI's GPT-4o-mini model to generate responses. "
@@ -78,7 +78,7 @@ if st.session_state["start_chat"]:
             "Content-Type": "application/json",
         }
         resp = requests.post(
-            f"https://c1d8-111-88-84-231.ngrok-free.app/api/calendars/{st.session_state['calendar_id']}/free-slots?userId={st.session_state['user_id']}&days=7&timeout=60",
+            f"https://c1d8-111-88-84-231.ngrok-free.app/api/calendars/{st.session_state['calendar_id']}/free-slots/?userId={st.session_state['user_id']}&days=7&timeout=60",
             json={"message": prompt},
             headers=headers,
         )
